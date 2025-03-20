@@ -6,7 +6,6 @@ import copy
 from collections.abc import Iterable
 from typing import Union
 from collections import deque
-from andrew.gt import adjify
 from itertools import groupby
 
 class Node:
@@ -396,13 +395,26 @@ def graph_from_fluxed(adj: np.array) -> ConnectedGraph:
     return ConnectedGraph(nodes)
 
     
-def generate_good_tree(p,d):
+def generate_good_tree(X: list[int]):
     """
-       p (int): branching factor
-       d (int): depth 
+      Generates a good tree from a sequence X
     """
+    depth = len(X)
+    Nodes =  [Node(index=1, neighbors=np.arange(2,2+X[0],1))]
     
-    return None
+
+    for layer in range(depth,1,-1):
+        parent_layer_mag = np.cumprod(X[depth-layer+1:])[-1]
+        #upper
+        parents = [i for i in range (tree_mag(X[depth-layer+2:])+1, tree_mag(X[depth-layer+1:])+1) ]
+        
+        for i, node in enumerate(parents):
+            childIndices = [k for k in range(parents[0] + parent_layer_mag + X[depth-layer]*i , parents[0] + parent_layer_mag + X[depth-layer] * (i+1))  ]
+            childNode = 
+            
+        
+    
+    return Tree(nodes=Nodes)
 
 def pl_graph(adj_matrix,title=""):
     """
@@ -457,3 +469,17 @@ def generate_random_cycle_graph(tree: Tree):
     """
     
     return None
+
+
+###### Helping with Counting ######
+def tree_mag(X:list[int]):
+    d = len(X)
+    if type(X) == np.ndarray:
+      X = X.tolist()
+    X = [1]+X
+    total = 1
+    for i in range(0, d):
+        total += np.prod(X[-(i+1):])
+    return total
+def gt_mag(X:list[int]):
+    return tree_mag(X) + tree_mag(X[1:])
