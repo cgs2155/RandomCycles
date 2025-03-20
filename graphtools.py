@@ -7,13 +7,17 @@ from collections.abc import Iterable
 from typing import Union
 from collections import deque
 from itertools import groupby
+import random
 
 class Node:
     
     def __init__(self, index: int, neighbors: Union[set[int],list[int],int], phases = None):
         self.index = index
-        self.neighbors = set(neighbors)
-        self.degree = len(neighbors)
+        if type(neighbors) == int:
+            self.neighbors = set([neighbors])
+        else:     
+            self.neighbors = set(neighbors)
+        self.degree = len(self.neighbors)
         #fluxes should be a dictionary that takes an index of a neighbor as a key
         #as gives back the phase associated with traveling to that neighbor as an item
         if phases is None or phases is set():
@@ -397,23 +401,34 @@ def graph_from_fluxed(adj: np.array) -> ConnectedGraph:
     
 def generate_good_tree(X: list[int]):
     """
-      Generates a good tree from a sequence X
+    Generates a good tree from a sequence X
     """
     depth = len(X)
-    Nodes =  [Node(index=1, neighbors=np.arange(2,2+X[0],1))]
-    
+    NodeDict =  {1: Node(index=1, neighbors=np.arange(2,2+X[-1],1))}
+    for child in NodeDict[1].neighbors:
+        NodeDict[child] = Node(index=child,neighbors=1)
 
     for layer in range(depth,1,-1):
         parent_layer_mag = np.cumprod(X[depth-layer+1:])[-1]
         #upper
-        parents = [i for i in range (tree_mag(X[depth-layer+2:])+1, tree_mag(X[depth-layer+1:])+1) ]
-        
-        for i, node in enumerate(parents):
-            childIndices = [k for k in range(parents[0] + parent_layer_mag + X[depth-layer]*i , parents[0] + parent_layer_mag + X[depth-layer] * (i+1))  ]
-            childNode = 
+        #parents = [Node(index=i,neighbors =[]) for i in range (tree_mag(X[depth-layer+2:])+1, tree_mag(X[depth-layer+1:])+1) ]
+        parent_indices = [i for i in range (tree_mag(X[depth-layer+2:])+1, tree_mag(X[depth-layer+1:])+1) ]
+        #i represents parend index
+        for i, parent in enumerate(parent_indices):
+            if parent not in NodeDict:
+                NodeDict[parent_indices] = Node(index = parent, neighbors=[]) 
+                
+            childIndices = [k for k in range(parent_indices[0] + parent_layer_mag + X[depth-layer]*i , parent_indices[0] + parent_layer_mag + X[depth-layer] * (i+1))  ]
+            for child in childIndices:
+                if child not in NodeDict:
+                    NodeDict[child] = Node(index = child, neighbors=parent)
+                else:
+                    NodeDict[child].add_neighbor(parent)
+                NodeDict[parent].add_neighbor(child)
             
-        
     
+    Nodes = [v for k,v in NodeDict.items()]
+
     return Tree(nodes=Nodes)
 
 def pl_graph(adj_matrix,title=""):
@@ -460,15 +475,31 @@ def get_edges(A):
 
     return grouped_edges, num_edges
 
-
+def shift_graph(graph: ConnectedGraph, shift: int):
+    """Changes the index of every element of a graph by a shift"""
+    Nodes = []
+    for node in graph.nodes:
+        Nodes.append(Node(index = node.index+ shift, neighbors=[i+ shift for i in node.neighbors]))
+    return ConnectedGraph(Nodes)
 
 def generate_random_cycle_graph(tree: Tree):
     """ 
     Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees
     
     """
+    tree_size =  len(tree.nodes)
+    bot_layer = [node.index for node in tree.nodes if node.degree == 1]
+    copy_bot_layer = [leaf + tree_size for leaf in bot_layer]
+
+    RandomCycleGraph = ConnectedGraph(nodes = tree.nodes | shift_graph(tree, tree_size ).nodes )
     
-    return None
+    #### Add random edges between the leaves at the deepest level
+    for leaf in bot_layer:
+        new_neighbor = copy_bot_layer.pop(random.randint(0,len(copy_bot_layer)-1))                    
+        RandomCycleGraph.node_map[leaf].add_neighbor(new_neighbor)
+        RandomCycleGraph.node_map[new_neighbor].add_neighbor(leaf)
+    
+    return RandomCycleGraph
 
 
 ###### Helping with Counting ######
