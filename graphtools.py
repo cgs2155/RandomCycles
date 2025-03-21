@@ -431,7 +431,7 @@ def generate_good_tree(X: list[int]):
 
     return Tree(nodes=Nodes)
 
-def pl_graph(adj_matrix,title=""):
+def pl_adj(adj_matrix,title=""):
     """
     Plots a graph based on its adjacency matrix.
 
@@ -449,6 +449,24 @@ def pl_graph(adj_matrix,title=""):
     plt.title(title)
     plt.show()
 
+def pl_graph(graph: ConnectedGraph, positions=None, title=""):
+    """Visualizes a Graph"""
+    
+    G = nx.Graph()
+    
+    for node in graph.nodes:
+        for neighbor_index in node.neighbors:
+            if not G.has_edge(node.index, neighbor_index):
+                G.add_edge(node.index, neighbor_index)
+    
+    if positions is None:
+        positions = nx.spring_layout(G)
+        
+    plt.figure(figsize=(5, 5))
+    nx.draw(G, pos=positions, with_labels=True, node_color="lightblue", edge_color="gray", font_weight="bold", node_size=500, font_size=10)
+    plt.title(title)
+    plt.show()
+    
 """Make sure the fluxes are transferred correctly """
 def get_edges(A):
     u, v = np.where(np.triu(A, k=1) == 1)
@@ -487,17 +505,26 @@ def generate_random_cycle_graph(tree: Tree):
     Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees
     
     """
-    tree_size =  len(tree.nodes)
-    bot_layer = [node.index for node in tree.nodes if node.degree == 1]
-    copy_bot_layer = [leaf + tree_size for leaf in bot_layer]
+    tree_copy = tree.deep_copy()
+    tree_size =  len(tree_copy.nodes)
+    bot_layer = [int(node.index) for node in tree.nodes if node.degree == 1]
+    copy_bot_layer = [int(leaf) + tree_size for leaf in bot_layer]
 
-    RandomCycleGraph = ConnectedGraph(nodes = tree.nodes | shift_graph(tree, tree_size ).nodes )
-    
+    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(tree, tree_size ).nodes )
     #### Add random edges between the leaves at the deepest level
     for leaf in bot_layer:
-        new_neighbor = copy_bot_layer.pop(random.randint(0,len(copy_bot_layer)-1))                    
-        RandomCycleGraph.node_map[leaf].add_neighbor(new_neighbor)
-        RandomCycleGraph.node_map[new_neighbor].add_neighbor(leaf)
+        nn_indices = random.sample((0,len(copy_bot_layer)-1),2)
+        new_neighbors = (copy_bot_layer[nn_indices[0]], copy_bot_layer[nn_indices[1]])
+                
+        RandomCycleGraph.node_map[leaf].add_neighbor(new_neighbors[0])
+        RandomCycleGraph.node_map[new_neighbors[0]].add_neighbor(leaf)
+        
+        RandomCycleGraph.node_map[leaf].add_neighbor(new_neighbors[1])
+        RandomCycleGraph.node_map[new_neighbors[1]].add_neighbor(leaf)
+        
+        for neighbor_index in new_neighbors:
+            if RandomCycleGraph.node_map[neighbor_index].degree > 2:
+                copy_bot_layer.remove(neighbor_index)
     
     return RandomCycleGraph
 
@@ -506,7 +533,7 @@ def generate_random_cycle_graph(tree: Tree):
 def tree_mag(X:list[int]):
     d = len(X)
     if type(X) == np.ndarray:
-      X = X.tolist()
+        X = X.tolist()
     X = [1]+X
     total = 1
     for i in range(0, d):
@@ -514,3 +541,48 @@ def tree_mag(X:list[int]):
     return total
 def gt_mag(X:list[int]):
     return tree_mag(X) + tree_mag(X[1:])
+
+
+########## Tree Coordinates ############
+def tree_coords(X: list[int], xd=1, yd=1):
+    depth = len(X)
+    coord_dict = {1: (0,yd)}
+    #start from middle layer:
+    midrange = list(range(tree_mag(X[1:])+1, tree_mag(X)+1))
+    line = lambda x: yd/xd*x+yd
+    print(line(0))
+    #give coordinates to the middle level
+    for i,vertex in  enumerate(midrange):
+        y = 0#yd*(depth)
+        x_coords = np.linspace(-xd, xd, len(midrange))
+        coord_dict[vertex] = (x_coords[i] ,y)
+    for layer in range(depth,1,-1):
+        x_coords = []
+        parent_layer_mag = np.cumprod(X[depth-layer+1:])[-1]
+        #upper
+        parents = list(
+            range(
+                tree_mag(X[depth - layer + 2 :]) + 1,
+                tree_mag(X[depth - layer + 1 :]) + 1,)
+        )
+        #print(upper_parents)
+        for i, node in enumerate(parents):
+            children = list(
+                range(
+                    parents[0] + parent_layer_mag + X[depth - layer] * i,
+                    parents[0] + parent_layer_mag + X[depth - layer] * (i + 1),
+                )
+            )
+            x_coords.append( np.mean([coord_dict[j][0] for j in children] ))
+        y_coord = line(x_coords[0])
+        for i, node in enumerate(parents):
+            coord_dict[node] = (x_coords[i] , y_coord)
+    return coord_dict
+
+def rand_cycle_coords(X: list[int], xd=1, yd=1,spacing=1):
+    left_coords = tree_coords(X,xd,yd)
+    coords = left_coords.copy()
+    tree_size = tree_mag(X)
+    for coord in left_coords.keys():
+        coords[coord+tree_size]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
+    return coords
