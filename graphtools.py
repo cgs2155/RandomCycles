@@ -9,6 +9,8 @@ from collections import deque
 from itertools import groupby
 import random
 
+from Andrew.gt import cascade
+
 class Node:
     
     def __init__(self, index: int, neighbors: Union[set[int],list[int],int], phases = None):
@@ -398,6 +400,43 @@ def graph_from_fluxed(adj: np.array) -> ConnectedGraph:
                 
     return ConnectedGraph(nodes)
 
+def tree_from_fluxed(adj: np.array) -> Tree:
+
+    """Creates a Connected Graph Object From an fluxed Matrix"""
+    num_nodes = np.shape(adj)[0]
+    node_map = {}
+    nodes = []
+    
+    for i in range(num_nodes):
+        if i not in node_map:
+            curr_node = Node(i,[])
+        else:
+            curr_node = node_map[i]
+        
+        if num_nodes > 1:
+            row = adj[i,:]
+
+            for j in range(i,num_nodes):
+                if row[j] != 0:
+                    if j not in node_map:
+                        new_node = Node(j,[i])
+
+                        nodes.append(new_node)
+                        node_map[j] = new_node
+                    else:
+                        new_node = node_map[j]
+
+                    flux = adj[i,j]
+                    curr_node.add_neighbor(j, flux)
+                    #for adjify mat, a_ij = -(a_ji)^*
+                    new_node.add_neighbor(i, -1*np.conjugate(flux))
+
+        if i not in node_map:
+            nodes.append(curr_node)
+            node_map[i] = curr_node
+                
+    return Tree(nodes)
+
     
 def generate_good_tree(X: list[int]):
     """
@@ -497,7 +536,7 @@ def shift_graph(graph: ConnectedGraph, shift: int):
     """Changes the index of every element of a graph by a shift"""
     Nodes = []
     for node in graph.nodes:
-        Nodes.append(Node(index = node.index+ shift, neighbors=[i+ shift for i in node.neighbors]))
+        Nodes.append(Node(index = node.index+ shift, neighbors=[i+ shift for i in node.neighbors],phases = {key+shift:value for key,value in node.phases.items()}))
     return ConnectedGraph(Nodes)
 
 def generate_random_cycle_graph(tree: Tree):
@@ -586,3 +625,69 @@ def rand_cycle_coords(X: list[int], xd=1, yd=1,spacing=1):
     for coord in left_coords.keys():
         coords[coord+tree_size]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
     return coords
+
+
+#### Getting the Phases ####
+
+def change_basis(adj_matrix, new_order):
+    """
+    Changes the basis of an adjacency matrix by permuting its rows and columns.
+    
+    Parameters:
+        adj_matrix (np.ndarray): The original adjacency matrix.
+        new_order (list): The new order of site labels, where the indices correspond to the new labels and the values are the old labels (1-based).
+    
+    Returns:
+        np.ndarray: The adjacency matrix in the new basis.
+    """
+    
+    # Permute rows and columns
+    new_adj_matrix = adj_matrix[np.ix_(new_order, new_order)]
+    
+    return new_adj_matrix
+
+def bfs_order(adj_matrix, start=0):
+    """
+    Perform a breadth-first traversal on a graph represented by its adjacency matrix.
+    
+    Parameters:
+        adj_matrix (list of lists or numpy.ndarray): The adjacency matrix of the graph.
+            It is assumed that a nonzero entry at adj_matrix[i][j] indicates an edge from vertex i to j.
+        start (int): The starting vertex for the BFS.
+        
+    Returns:
+        list: A list of vertices in the order they are visited by the BFS.
+    """
+    n = len(adj_matrix)            # Number of vertices
+    visited = [False] * n          # Keep track of visited vertices
+    order = []                     # List to store the BFS order
+    queue = deque([start])         # Initialize the queue with the start vertex
+    
+    visited[start] = True          # Mark the starting vertex as visited
+    
+    while queue:
+        current = queue.popleft()  # Get the next vertex from the queue
+        order.append(current)      # Add it to the order
+        
+        # Check all possible neighbors of the current vertex
+        for neighbor, edge in enumerate(adj_matrix[current]):
+            # If there is an edge and the neighbor has not been visited
+            if edge and not visited[neighbor]:
+                visited[neighbor] = True
+                queue.append(neighbor)
+                
+    return order
+
+def fluxedTree(X: list[int]):
+    
+    adj_mat = cascade(X)
+    order = bfs_order(adj_mat)
+    gt_mat = change_basis(adj_mat, order)
+    
+    cut = tree_mag(X)
+    tree_mat = gt_mat[:cut,:cut]
+    
+    tree = shift_graph(tree_from_fluxed(tree_mat),1)
+    
+    return tree
+    
