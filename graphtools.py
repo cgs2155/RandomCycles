@@ -11,6 +11,9 @@ import random
 
 from Andrew.gt import cascade
 
+edge_color = '#264653'
+vertex_color ='#E76F51'
+
 class Node:
     
     def __init__(self, index: int, neighbors: Union[set[int],list[int],int], phases = None):
@@ -455,7 +458,7 @@ def generate_good_tree(X: list[int]):
         #i represents parend index
         for i, parent in enumerate(parent_indices):
             if parent not in NodeDict:
-                NodeDict[parent_indices] = Node(index = parent, neighbors=[]) 
+                NodeDict[parent] = Node(index = parent, neighbors=[]) 
                 
             childIndices = [k for k in range(parent_indices[0] + parent_layer_mag + X[depth-layer]*i , parent_indices[0] + parent_layer_mag + X[depth-layer] * (i+1))  ]
             for child in childIndices:
@@ -488,7 +491,7 @@ def pl_adj(adj_matrix,title=""):
     plt.title(title)
     plt.show()
 
-def pl_graph(graph: ConnectedGraph, positions=None, title=""):
+def pl_graph(graph: ConnectedGraph, positions=None, title="" ,vertex_size=500,outline_weight = 5,edge_weight=10, margin = 10):
     """Visualizes a Graph"""
     
     G = nx.Graph()
@@ -502,7 +505,19 @@ def pl_graph(graph: ConnectedGraph, positions=None, title=""):
         positions = nx.spring_layout(G)
         
     plt.figure(figsize=(5, 5))
-    nx.draw(G, pos=positions, with_labels=True, node_color="lightblue", edge_color="gray", font_weight="bold", node_size=500, font_size=10)
+    
+    nx.draw_networkx_nodes(G, positions, node_color=vertex_color, edgecolors=edge_color, linewidths=outline_weight, node_size=vertex_size)
+
+    for edge in G.edges(data='weight'):
+        nx.draw_networkx_edges(G, positions, edgelist=[edge], width=edge_weight,edge_color=edge_color)
+
+
+    all_x = [pos[0] for pos in positions.values()]
+    all_y = [pos[1] for pos in positions.values()]
+    plt.xlim(min(all_x) - margin, max(all_x) + margin)
+    plt.ylim(min(all_y) - margin, max(all_y) + margin)
+    plt.gca().set_aspect('equal', adjustable='box')
+
     plt.title(title)
     plt.show()
     
@@ -583,13 +598,12 @@ def gt_mag(X:list[int]):
 
 
 ########## Tree Coordinates ############
-def tree_coords(X: list[int], xd=1, yd=1):
+def tree_diamond_coords(X: list[int], xd=1, yd=1):
     depth = len(X)
     coord_dict = {1: (0,yd)}
     #start from middle layer:
     midrange = list(range(tree_mag(X[1:])+1, tree_mag(X)+1))
     line = lambda x: yd/xd*x+yd
-    print(line(0))
     #give coordinates to the middle level
     for i,vertex in  enumerate(midrange):
         y = 0#yd*(depth)
@@ -618,6 +632,50 @@ def tree_coords(X: list[int], xd=1, yd=1):
             coord_dict[node] = (x_coords[i] , y_coord)
     return coord_dict
 
+def tree_coords(X: list[int], xd=1, yd=1):
+    depth = len(X)
+    coord_dict = {1: (0,yd*(depth))}
+    #start from middle layer:
+    midrange = list(range(tree_mag(X[1:])+1, tree_mag(X)+1))
+
+    #give coordinates to the middle level
+    for i,vertex in  enumerate(midrange):
+        y = 0#yd*(depth)
+        x_coords = np.linspace(-xd, xd, len(midrange))
+        coord_dict[vertex] = (x_coords[i] , y)
+
+    for layer in range(depth,1,-1):
+        x_coords = []
+        parent_layer_mag = np.cumprod(X[depth-layer+1:])[-1]
+        #upper
+        parents = list(
+            range(
+                tree_mag(X[depth - layer + 2 :]) + 1,
+                tree_mag(X[depth - layer + 1 :]) + 1,)
+        )
+        #print(upper_parents)
+        for i, node in enumerate(parents):
+            children = list(
+                range(
+                    parents[0] + parent_layer_mag + X[depth - layer] * i,
+                    parents[0] + parent_layer_mag + X[depth - layer] * (i + 1),
+                )
+            )
+            x_coords.append( np.mean([coord_dict[j][0] for j in children] ))
+        y_coord = yd*(depth-layer+1)
+        for i, node in enumerate(parents):
+            coord_dict[node] = (x_coords[i] , y_coord)
+    return coord_dict
+
+
+def rand_cycle_diamond_coords(X: list[int], xd=1, yd=1,spacing=1):
+    left_coords = tree_diamond_coords(X,xd,yd)
+    coords = left_coords.copy()
+    tree_size = tree_mag(X)
+    for coord in left_coords.keys():
+        coords[coord+tree_size]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
+    return coords
+
 def rand_cycle_coords(X: list[int], xd=1, yd=1,spacing=1):
     left_coords = tree_coords(X,xd,yd)
     coords = left_coords.copy()
@@ -626,6 +684,13 @@ def rand_cycle_coords(X: list[int], xd=1, yd=1,spacing=1):
         coords[coord+tree_size]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
     return coords
 
+def glued_tree_coords(X: list[int], xd=1, yd=1,spacing=1):
+    left_coords = tree_coords(X,xd,yd)
+    coords = tree_coords(X[:-1],xd,yd)
+    tree_size = tree_mag(X)
+    for coord in left_coords.keys():
+        coords[coord+tree_size]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
+    return coords
 
 #### Getting the Phases ####
 
