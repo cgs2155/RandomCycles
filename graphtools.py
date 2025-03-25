@@ -491,11 +491,10 @@ def pl_adj(adj_matrix,title=""):
     plt.title(title)
     plt.show()
 
-def pl_graph(graph: ConnectedGraph, positions=None, title="" ,vertex_size=500,outline_weight = 5,edge_weight=10, margin = 10):
+def pl_graph(ax, graph, positions=None, title="" ,vertex_size=500,outline_weight = 5,edge_weight=10, margin = 10):
     """Visualizes a Graph"""
     
     G = nx.Graph()
-    
     for node in graph.nodes:
         for neighbor_index in node.neighbors:
             if not G.has_edge(node.index, neighbor_index):
@@ -503,24 +502,24 @@ def pl_graph(graph: ConnectedGraph, positions=None, title="" ,vertex_size=500,ou
     
     if positions is None:
         positions = nx.spring_layout(G)
-        
-    plt.figure(figsize=(5, 5))
-    
-    nx.draw_networkx_nodes(G, positions, node_color=vertex_color, edgecolors=edge_color, linewidths=outline_weight, node_size=vertex_size)
+            
+    nx.draw_networkx_nodes(G, positions, node_color=vertex_color, edgecolors=edge_color, linewidths=outline_weight, node_size=vertex_size, ax=ax)
 
     for edge in G.edges(data='weight'):
-        nx.draw_networkx_edges(G, positions, edgelist=[edge], width=edge_weight,edge_color=edge_color)
-
+        nx.draw_networkx_edges(G, positions, edgelist=[edge], width=edge_weight,edge_color=edge_color,ax=ax)
+    
 
     all_x = [pos[0] for pos in positions.values()]
     all_y = [pos[1] for pos in positions.values()]
-    plt.xlim(min(all_x) - margin, max(all_x) + margin)
-    plt.ylim(min(all_y) - margin, max(all_y) + margin)
-    plt.gca().set_aspect('equal', adjustable='box')
-
-    plt.title(title)
-    plt.show()
+    ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
+    ax.set_ylim(min(all_y) - margin, max(all_y) + margin)
+    ax.set_aspect('equal', adjustable='box')
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_title(title)
     
+    return ax
+
 """Make sure the fluxes are transferred correctly """
 def get_edges(A):
     u, v = np.where(np.triu(A, k=1) == 1)
@@ -634,13 +633,13 @@ def tree_diamond_coords(X: list[int], xd=1, yd=1):
 
 def tree_coords(X: list[int], xd=1, yd=1):
     depth = len(X)
-    coord_dict = {1: (0,yd*(depth))}
+    coord_dict = {1: (0, yd)}
     #start from middle layer:
     midrange = list(range(tree_mag(X[1:])+1, tree_mag(X)+1))
 
     #give coordinates to the middle level
     for i,vertex in  enumerate(midrange):
-        y = 0#yd*(depth)
+        y = 0
         x_coords = np.linspace(-xd, xd, len(midrange))
         coord_dict[vertex] = (x_coords[i] , y)
 
@@ -662,10 +661,11 @@ def tree_coords(X: list[int], xd=1, yd=1):
                 )
             )
             x_coords.append( np.mean([coord_dict[j][0] for j in children] ))
-        y_coord = yd*(depth-layer+1)
+        y_coord = yd* (depth-layer+1)/depth
         for i, node in enumerate(parents):
             coord_dict[node] = (x_coords[i] , y_coord)
     return coord_dict
+
 
 
 def rand_cycle_diamond_coords(X: list[int], xd=1, yd=1,spacing=1):
@@ -686,7 +686,7 @@ def rand_cycle_coords(X: list[int], xd=1, yd=1,spacing=1):
 
 def glued_tree_coords(X: list[int], xd=1, yd=1,spacing=1):
     left_coords = tree_coords(X,xd,yd)
-    coords = tree_coords(X[:-1],xd,yd)
+    coords = left_coords.copy() #tree_coords(X,xd,yd)
     tree_size = tree_mag(X)
     for coord in left_coords.keys():
         coords[coord+tree_size]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
