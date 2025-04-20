@@ -96,13 +96,15 @@ def enumerate_necklaces_tqdm(n):
     return necklaces
 
 
-def gen_necklace(n):
+def gen_necklace(n, rng = None):
+    if rng is None:
+        rng = random
 
     odd_seq = list(range(3, 2*n+1,2))
     even_seq = list(range(2, 2*n+1,2))
-    random.shuffle(odd_seq)
+    rng.shuffle(odd_seq)
     odd_seq = [1]+odd_seq
-    random.shuffle(even_seq)
+    rng.shuffle(even_seq)
 
     necklace = []
     for o, e in zip(odd_seq, even_seq):
