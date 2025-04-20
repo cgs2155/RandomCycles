@@ -6,9 +6,9 @@ plt.rcParams.update({
     "text.usetex": True,
     "font.family": "Helvetica"
 })
-from gt import cascade
-from gt import periodify  
-from gt import adjify 
+from Andrew.gt import cascade
+from Andrew.gt import periodify  
+from Andrew.gt import adjify 
 from multiprocessing import Pool
 
 class lattice: 
@@ -33,7 +33,7 @@ class lattice:
 
         energies = []
         for k in range(kvals+1): 
-            kmat = periodify(self.unitcell,2 * np.pi * k/kvals,1)
+            kmat = periodify(self.unitcell, 2 * np.pi * k/kvals, 1)
             energies.append(np.linalg.eigvalsh(kmat))
         return [2*np.pi*k/kvals for k in range(kvals+1)], np.array(energies)
 
@@ -73,7 +73,7 @@ def gen_labels(numbers):
         produces horizontal ticks in a nice latex format for 
         the butterfly plots.. don't mess with this lol.
     """
-    denom = np.product(numbers)
+    denom = np.prod(numbers)
     labels = []
     for x in range(0,denom + 1):
         gcd = np.gcd(2 * x, denom)
@@ -150,7 +150,7 @@ def cdpar(numbers,phisteps,ksteps,density_factor=10,ncores=4):
 
     ens = results.get()
     
-    # densify values in flux, and then return after flattening into (phi, E) pairs
+    # densify values in flux, and then return afterxx flattening into (phi, E) pairs
     ens = densify(ens,density_factor)
     x,y = flatify(ens)
     return np.concatenate((x,2*np.pi - x)), np.concatenate((y,y))
@@ -167,7 +167,7 @@ def colordiagramplot(numbers,x,y,resolution=100):
 
         produces a butterfly plot by taking the output of colordiagram()
     """
-    gs = resolution*np.product(numbers)
+    gs = resolution*np.prod(numbers)
 
     # set domain and range of the plot
     xlim = 0, 2 * np.pi
@@ -186,7 +186,7 @@ def colordiagramplot(numbers,x,y,resolution=100):
     ax.set_xlabel(r"$\Phi$")
 
     # ticks and tick labels
-    ax.set_xticks(np.array(range(0, np.product(numbers)+1))*2 *np.pi/np.product(numbers))
+    ax.set_xticks(np.array(range(0, np.prod(numbers)+1))*2 *np.pi/np.prod(numbers))
     ax.set_xticklabels(gen_labels(numbers))
     cb = fig.colorbar(hb, ax=ax, label='counts')
 

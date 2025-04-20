@@ -1,5 +1,5 @@
 import numpy as np
-from vectools import e_n
+from _vectools import e_n
 
 def F_n(X: list[int]):
     """
@@ -21,4 +21,9 @@ def F_n(X: list[int]):
 
     return F_n_list
 
-
+def tbw(bands):
+    """total bandwidth of a walk """
+    total = 0
+    for band in bands:
+        total += np.max(band) - np.min(band)
+    return total

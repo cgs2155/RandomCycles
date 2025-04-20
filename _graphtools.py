@@ -10,6 +10,7 @@ from itertools import groupby
 import random
 
 from Andrew.gt import cascade
+from _counttools import gen_necklace
 
 edge_color = '#264653'
 vertex_color ='#E76F51'
@@ -62,8 +63,10 @@ class ConnectedGraph:
     def __init__(self, nodes: Union[Node, set[Node],list[Node]]):
         self.nodes = set(nodes)
         self.node_map = {node.index: node for node in self.nodes}
+        #adjacency matries to be constructed later
         self.adj = None
         self.fluxed = None #the adjacency matrix with the fluxes
+        self.period = None #construct the periodified matrix later
 
     def construct_adj(self) -> None:
         """
@@ -115,6 +118,22 @@ class ConnectedGraph:
                 #fluxed[j,i] = self.node_map[neighbor_idx].phases[node_idx]
 
         self.fluxed = fluxed
+
+    def construct_period(self, loop_flux) -> None:
+        """Generates the periodified fluxed adjacency matrix at a given loop flux with a k depedence """
+        if type(self.adj) == None:
+            self.construct_adj()
+        if type(self.fluxed) != np.ndarray:
+            self.construct_fluxed()
+
+        def period(phase):
+        # copy so we never clobber `base`
+            R = self.weighted_adj(loop_flux).copy()
+            R[0, :]      += np.exp(1j*phase)  * R[-1, :]
+            R[:, 0]      += np.exp(-1j*phase) * R[:, -1]
+            return R[:-1, :-1]
+
+        self.period = period
 
     def weighted_adj(self, flux) -> np.array:
         """
@@ -548,65 +567,44 @@ def get_edges(A):
 def shift_graph(graph: ConnectedGraph, shift: int):
     """Changes the index of every element of a graph by a shift"""
     Nodes = []
-    for node in graph.nodes:
+    graph_copy = graph.deep_copy()
+    for node in graph_copy.nodes:
         Nodes.append(Node(index = node.index+ shift, neighbors=[i+ shift for i in node.neighbors],phases = {key+shift:value for key,value in node.phases.items()}))
     return ConnectedGraph(Nodes)
 
-def generate_random_cycle_graph(tree: Tree, seed = None):
+def generate_random_cycle_graph(tree: Tree, necklace = None):
     """ 
     Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees
     
     """
     tree_copy = tree.deep_copy()
     tree_size =  len(tree_copy.nodes)
-    bot_layer = [int(node.index) for node in tree.nodes if node.degree == 1]
+    bot_layer = [int(node.index) for node in tree_copy.nodes if node.degree == 1]
+    bot_layer.sort()
     copy_bot_layer = [int(leaf) + tree_size for leaf in bot_layer]
 
-    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(tree, tree_size ).nodes )
+    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(tree_copy, tree_size).nodes )
+    if not necklace or len(necklace) != 2*len(bot_layer):
+        necklace = gen_necklace(len(bot_layer))
 
-    if seed and len(seed) == 2*len(bot_layer):
-        odd_leaf_index = bot_layer[int(seed[0]/2)]
-        left_neighbor = copy_bot_layer[int(seed[-1]/2)-1]
-        right_neighbor =  copy_bot_layer[int(seed[1]/2)-1]
+    odd_leaf_index = bot_layer[int(necklace[0]/2)]
+    left_neighbor = copy_bot_layer[int(necklace[-1]/2)-1]
+    right_neighbor =  copy_bot_layer[int(necklace[1]/2)-1]
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
+    RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
+    RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
+
+    #connect odd beads to their neighbors
+    for bead_index in range(2,len(necklace),2):
+        odd_leaf_index = bot_layer[int(necklace[bead_index]/2)]
+        left_neighbor = copy_bot_layer[int(necklace[bead_index-1]/2)-1]
+        right_neighbor =  copy_bot_layer[int(necklace[bead_index+1]/2)-1]
+
         RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
         RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
         RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
         RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
-
-        #connect odd beads to their neighbors
-        for bead_index in range(2,len(seed),2):
-            odd_leaf_index = bot_layer[int(seed[bead_index]/2)]
-            left_neighbor = copy_bot_layer[int(seed[bead_index-1]/2)-1]
-            right_neighbor =  copy_bot_layer[int(seed[bead_index+1]/2)-1]
-
-            RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
-            RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
-            RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
-            RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
-    else:
-        #### Add random edges between the leaves at the deepest level
-        first_leaf = curr_leaf = random.choice(bot_layer)
-        bot_layer.remove(curr_leaf)
-        left = True
-        while len(bot_layer+copy_bot_layer) > 0:
-            if left:
-                new_neighbor = random.choice(copy_bot_layer)
-                RandomCycleGraph.node_map[curr_leaf].add_neighbor(new_neighbor)
-                RandomCycleGraph.node_map[new_neighbor].add_neighbor(curr_leaf)
-                copy_bot_layer.remove(new_neighbor)
-                curr_leaf = new_neighbor
-                left = False
-            else:
-                new_neighbor = random.choice(bot_layer)
-                RandomCycleGraph.node_map[curr_leaf].add_neighbor(new_neighbor)
-                RandomCycleGraph.node_map[new_neighbor].add_neighbor(curr_leaf)
-                bot_layer.remove(new_neighbor)
-                curr_leaf = new_neighbor
-                left = True
-
-        #connect final leaf to first
-        RandomCycleGraph.node_map[curr_leaf].add_neighbor(first_leaf)
-        RandomCycleGraph.node_map[first_leaf].add_neighbor(curr_leaf)
 
     return RandomCycleGraph
 
@@ -785,3 +783,7 @@ def fluxedTree(X: list[int]):
     
     return tree
     
+def createGT(X: list[int]):
+    gt = graph_from_fluxed(cascade(X))
+    gt.construct_fluxed()
+    return gt
