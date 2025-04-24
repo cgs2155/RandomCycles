@@ -36,7 +36,8 @@ for i in range(1, n_max+1):
 
     N = len(rand.node_map)
     psi_i = e_n(0, N)
-    end = e_n(N - 1, N)
+    end_idx= tree_mag(X)
+    end = e_n(end_idx,N)
 
     # Define the time array over which evolution is evaluated
     num_time=400

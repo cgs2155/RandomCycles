@@ -19,8 +19,6 @@ def bandwidths(graph, face_fluxes, kvalues):
         bands = np.zeros((len(kvalues),N)) 
         #print(np.shape(bands))
         for j, k in enumerate(kvalues):
-            #print(j)
-            #print(type(j))
             bands[j] = np.linalg.eigvalsh(graph.period(k))
         bws[i] = tbw(np.transpose(bands))
     return bws
@@ -180,5 +178,5 @@ if __name__ == '__main__':
         np.savez(outfile, fluxes=fluxes, k=old_data['k'], avgbw=neck_widths, seed=seed, necklaces=neck_strings, sequence=X, rngstate=rng_arr)
         print(f"Results saved to {outfile}")
 
-        end = time.time()
-        print(f"Elapsed Time: {end-start} seconds")
+        stop = time.time()
+        print(f"Elapsed Time: {stop-start} seconds")

@@ -1,5 +1,3 @@
-import random as random
-
 from _graphtools import *
 from _vectools import *
 from _counttools import *
@@ -9,6 +7,7 @@ import numpy as np
 import warnings
 import argparse
 import pickle
+import random as random
 import tqdm as tqdm
 
 #### Functions
@@ -43,10 +42,10 @@ parser.add_argument('-c', help = 'The file to use if continuing old calculations
 
 parser.add_argument('-outfile', help = 'Output file holding neccessary information for plotting and generation seeds')
 parser.add_argument('--AFB', action='store_true', help='Include AFB points')
+parser.add_argument('--D', action='store_true', help="Checks All Possible Necklaces" )
 
 
 args = parser.parse_args()
-
 
 #### Runtime
 if __name__ == '__main__':
@@ -69,7 +68,7 @@ if __name__ == '__main__':
         end_idx= tree_mag(X)
         end = e_n(end_idx,N)
 
-        fluxes = np.linspace(0,4*np.pi, args.f)
+        fluxes = np.linspace(0,2*np.pi, args.f)
         if args.AFB:
             Z = np.prod(X)
             FBP = np.array([2*np.pi/Z * i for i in range(1, Z+1)])
@@ -78,46 +77,51 @@ if __name__ == '__main__':
         #now generate the averaged fluxed random cycle graph
         neck_strings=set()
 
-        with tqdm.tqdm(total=args.N,desc="Generating Necklaces") as pbar:
-            while len(neck_strings) < args.N:
-                curr = len(neck_strings)
-                neck = gen_necklace(neck_len, necklace_rng)
-                if neck not in neck_strings:
-                    neck_strings.add(neck)
-                if curr < len(neck_strings):
-                    pbar.update(1)
+        if args.D:
+            neck_strings = list(enumerate_necklaces(int(np.prod(X))))
+        else:
+            with tqdm.tqdm(total=args.N,desc="Generating Necklaces") as pbar:
+                while len(neck_strings) < args.N:
+                    curr = len(neck_strings)
+                    neck = gen_necklace(neck_len, necklace_rng)
+                    if neck not in neck_strings:
+                        neck_strings.add(neck)
+                    if curr < len(neck_strings):
+                        pbar.update(1)
 
-        flux_limit_dict={}
 
+
+        bad_neck = set()
         for neck in tqdm.tqdm(neck_strings,desc=f"Getting Necklace Limit", unit="Necklace"):       
             #generate seed
             rgc = generate_random_cycle_graph(ftree,neck)
             rgc.construct_fluxed()
 
+            flux_limits = np.zeros(len(fluxes))
+
             #loop over possible fluxes
-            for flux in fluxes:
+            for idx, flux in enumerate(fluxes):
                 #create Hamiltonian for this 
                 fluxed_hamiltonian = rgc.weighted_adj(flux) 
                 fluxed_eigvals, fluxed_eigvecs = np.linalg.eigh(fluxed_hamiltonian)   
 
-                flux_lim_curr  = limit(fluxed_eigvecs, psi_i,end)            
-                if flux in flux_limit_dict:
-                    flux_limit_dict[flux].append(flux_lim_curr)
-                else:
-                    flux_limit_dict[flux] =  [flux_lim_curr]
+                flux_limits[idx] = limit(fluxed_eigvecs, psi_i,end)            
+                
+            if np.argmax(flux_limits) != 0:
+                bad_neck.add(neck)
 
-        #average the time-series in the prob_flux_dict in order to get the average evolution over all necklaces
-        for key, value in flux_limit_dict.items():
-            flux_limit_dict[key] = np.mean(value)   
+
     
     
     # Save the time and probability arrays to a file for later plotting
         if args.outfile is None:
-            outfile = f"limitresults/{seed}_{args.N}_MClim.npz"
+            outfile = f"limitresults/{seed}_{args.N}_lim_check.npz"
         else:
             outfile = args.outfile
 
-        np.savez(outfile, flux_limit_dict=flux_limit_dict, seed=seed, N=args.N, sequence=X)
+        if len(bad_neck) == 0:
+            print("No Fast Necklaces")
+        np.savez(outfile, seed=seed, N=args.N, sequence=X, bad_neck=bad_neck,fluxes = fluxes)
         print(f"Results saved to {outfile}")
 
     #If continuing a calculation
@@ -131,8 +135,7 @@ if __name__ == '__main__':
         neck_rng = random.Random(seed)
 
         neck_len = np.prod(X)
-        old_flux_dict = old_data["flux_limit_dict"].item()
-        fluxes = list(old_flux_dict.keys())
+        fluxes = old_data["fluxes"]
         ftree = fluxedTree(X)
         ftree.construct_fluxed()
 
@@ -156,48 +159,39 @@ if __name__ == '__main__':
                 if curr < len(neck_strings):
                     pbar.update(1)
 
-        flux_limit_dict={}
+        
         N = 2*tree_mag(X)
         psi_i = e_n(0, N)
         end_idx= tree_mag(X)
         end = e_n(end_idx,N)
 
+        bad_neck = old_data["bad_neck"].item()
         for neck in tqdm.tqdm(neck_strings,desc=f"Getting Necklace Limit", unit="Necklace"):       
             #generate seed
             rgc = generate_random_cycle_graph(ftree,neck)
             rgc.construct_fluxed()
 
+            flux_limits = np.zeros(len(fluxes))
+
             #loop over possible fluxes
-            for flux in fluxes:
+            for idx, flux in enumerate(fluxes):
                 #create Hamiltonian for this 
                 fluxed_hamiltonian = rgc.weighted_adj(flux) 
                 fluxed_eigvals, fluxed_eigvecs = np.linalg.eigh(fluxed_hamiltonian)   
 
-                flux_lim_curr  = limit(fluxed_eigvecs, psi_i,end)            
-                if flux in flux_limit_dict:
-                    flux_limit_dict[flux].append(flux_lim_curr)
-                else:
-                    flux_limit_dict[flux] =  [flux_lim_curr]
-
-        #average the time-series in the prob_flux_dict in order to get the average evolution over all necklaces
-        for key, value in flux_limit_dict.items():
-            flux_limit_dict[key] = np.mean(value)   
-
-
-        #average the new necklaces with the old necklaces
-        M = oldN
-        N = len(neck_strings)
-        norm = M+N
-        new_prob_flux_dict = {key: (N/norm* flux_limit_dict[key] + M/norm* old_flux_dict[key]) for key in flux_limit_dict}     
+                flux_limits[idx] = limit(fluxed_eigvecs, psi_i,end)            
+                
+            if np.argmax(flux_limits) != 0:
+                bad_neck.add(neck)
 
         #Save the time and probability arrays to a file for later plotting
         if args.outfile is None:
-            outfile = f"limitresults/{seed}_{norm}_MClim.npz"
+            outfile = f"limitresults/{seed}_{args.N+oldN}_lim_check.npz"
         else:
             outfile = args.outfile
 
         rng_bytes = pickle.dumps(neck_rng.getstate())
         rng_arr   = np.frombuffer(rng_bytes, dtype=np.uint8)
 
-        np.savez(outfile, flux_limit_dict=flux_limit_dict, seed=seed, sequence=X, N = norm)
+        np.savez(outfile, seed=seed, N=args.N+oldN, sequence=X, bad_neck=bad_neck,fluxes = fluxes)
         print(f"Results saved to {outfile}")

@@ -28,9 +28,10 @@ for i in range(1, n_max+1):
     bare_hamiltonian = rand.adj
     bare_eigvals, bare_eigvecs = np.linalg.eigh(bare_hamiltonian)
 
-    N = len(rand.node_map)
+    N = 2*tree_mag(X)
     psi_i = e_n(0, N)
-    end = e_n(N - 1, N)
+    end_idx= tree_mag(X)
+    end = e_n(end_idx,N)
 
     # Define the time array over which evolution is evaluated
     num_flux=2000

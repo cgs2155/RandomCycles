@@ -517,16 +517,19 @@ def pl_graph(ax, graph, positions=None, title="" ,vertex_size=500,outline_weight
         for neighbor_index in node.neighbors:
             if not G.has_edge(node.index, neighbor_index):
                 G.add_edge(node.index, neighbor_index)
+    for node in graph.nodes:
+        G.add_node(node.index)
+        G.nodes[node.index]['label'] = node.index
     
     if positions is None:
         positions = nx.spring_layout(G)
             
     nx.draw_networkx_nodes(G, positions, node_color=vertex_color, edgecolors=edge_color, linewidths=outline_weight, node_size=vertex_size, ax=ax)
+    nx.draw_networkx_labels(G, positions, labels=nx.get_node_attributes(G, 'label'),font_size=15,font_color="black")
 
     for edge in G.edges(data='weight'):
         nx.draw_networkx_edges(G, positions, edgelist=[edge], width=edge_weight,edge_color=edge_color,ax=ax)
     
-
     all_x = [pos[0] for pos in positions.values()]
     all_y = [pos[1] for pos in positions.values()]
     ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
@@ -563,51 +566,6 @@ def get_edges(A):
     grouped_edges = [( list(group)) for key, group in groupby(zip(u, v), key=lambda x: x[0])]
 
     return grouped_edges, num_edges
-
-def shift_graph(graph: ConnectedGraph, shift: int):
-    """Changes the index of every element of a graph by a shift"""
-    Nodes = []
-    graph_copy = graph.deep_copy()
-    for node in graph_copy.nodes:
-        Nodes.append(Node(index = node.index+ shift, neighbors=[i+ shift for i in node.neighbors],phases = {key+shift:value for key,value in node.phases.items()}))
-    return ConnectedGraph(Nodes)
-
-def generate_random_cycle_graph(tree: Tree, necklace = None):
-    """ 
-    Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees
-    
-    """
-    tree_copy = tree.deep_copy()
-    tree_size =  len(tree_copy.nodes)
-    bot_layer = [int(node.index) for node in tree_copy.nodes if node.degree == 1]
-    bot_layer.sort()
-    copy_bot_layer = [int(leaf) + tree_size for leaf in bot_layer]
-
-    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(tree_copy, tree_size).nodes )
-    if not necklace or len(necklace) != 2*len(bot_layer):
-        necklace = gen_necklace(len(bot_layer))
-
-    odd_leaf_index = bot_layer[int(necklace[0]/2)]
-    left_neighbor = copy_bot_layer[int(necklace[-1]/2)-1]
-    right_neighbor =  copy_bot_layer[int(necklace[1]/2)-1]
-    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
-    RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
-    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
-    RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
-
-    #connect odd beads to their neighbors
-    for bead_index in range(2,len(necklace),2):
-        odd_leaf_index = bot_layer[int(necklace[bead_index]/2)]
-        left_neighbor = copy_bot_layer[int(necklace[bead_index-1]/2)-1]
-        right_neighbor =  copy_bot_layer[int(necklace[bead_index+1]/2)-1]
-
-        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
-        RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
-        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
-        RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
-
-    return RandomCycleGraph
-
 
 ###### Helping with Counting ######
 def tree_mag(X:list[int]):
@@ -720,6 +678,31 @@ def glued_tree_coords(X: list[int], xd=1, yd=1,spacing=1):
     return coords
 
 #### Getting the Phases ####
+def shift_graph(graph: ConnectedGraph, shift: int):
+    """Changes the index of every element of a graph by a shift"""
+    Nodes = []
+    graph_copy = graph.deep_copy()
+    for node in graph_copy.nodes:
+        Nodes.append(Node(index = node.index+ shift, neighbors=[i+ shift for i in node.neighbors],phases = {key+shift:value for key,value in node.phases.items()}))
+    return ConnectedGraph(Nodes)
+
+def flip_graph(graph: ConnectedGraph):
+    """Rverses the ordering of a graph"""
+    Nodes = []
+    N = len(graph.node_map)
+    flipped_dict = {i: N+1-i for i in list(graph.node_map.keys())}
+    for node in graph.nodes:
+        Nodes.append(Node(index = flipped_dict[node.index], neighbors=[flipped_dict[i] for i in node.neighbors],phases = {flipped_dict[key]:value for key,value in node.phases.items()}))
+    return ConnectedGraph(Nodes)
+
+def remove_phases(graph: ConnectedGraph):
+    """Returns a copy of a graph with all phases removed"""
+    Nodes = []
+    graph_copy = graph.deep_copy()
+    for node in graph_copy.nodes:
+        Nodes.append(Node(index = node.index, neighbors=[i for i in node.neighbors],phases = {key:1j for key,value in node.phases.items()}))
+    return ConnectedGraph(Nodes)
+
 
 def change_basis(adj_matrix, new_order):
     """
@@ -787,3 +770,73 @@ def createGT(X: list[int]):
     gt = graph_from_fluxed(cascade(X))
     gt.construct_fluxed()
     return gt
+
+def generate_random_cycle_graph(tree: Tree, necklace = None):
+    """ 
+    Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees
+    
+    """
+    #making some changes to work with a flipped graph
+    tree_copy = tree.deep_copy()
+    #tree_copy = flip_graph(tree)
+    tree_size =  len(tree_copy.nodes)
+    bot_layer = [int(node.index) for node in tree_copy.nodes if node.degree == 1]
+    bot_layer.sort()
+    copy_bot_layer = [int(leaf) + tree_size for leaf in bot_layer]
+
+    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(tree_copy, tree_size).nodes )
+    if not necklace or len(necklace) != 2*len(bot_layer):
+        necklace = gen_necklace(len(bot_layer))
+
+    odd_leaf_index = bot_layer[int(necklace[0]/2)]
+    left_neighbor = copy_bot_layer[int(necklace[-1]/2)-1]
+    right_neighbor =  copy_bot_layer[int(necklace[1]/2)-1]
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
+    RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
+    RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
+
+    #connect odd beads to their neighbors
+    for bead_index in range(2,len(necklace),2):
+        odd_leaf_index = bot_layer[int(necklace[bead_index]/2)]
+        left_neighbor = copy_bot_layer[int(necklace[bead_index-1]/2)-1]
+        right_neighbor =  copy_bot_layer[int(necklace[bead_index+1]/2)-1]
+
+        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
+        RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
+        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
+        RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
+
+    return RandomCycleGraph
+
+def generate_half_rgc(tree: Tree, necklace = None):
+    tree_copy = tree.deep_copy()
+    tree_size =  len(tree_copy.nodes)
+    bot_layer = [int(node.index) for node in tree_copy.nodes if node.degree == 1]
+    bot_layer.sort()
+    copy_bot_layer = [int(leaf) + tree_size for leaf in bot_layer]
+    bot_half_graph = remove_phases(shift_graph(tree_copy, tree_size))
+    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | bot_half_graph.nodes )
+    if not necklace or len(necklace) != 2*len(bot_layer):
+        necklace = gen_necklace(len(bot_layer))
+
+    odd_leaf_index = bot_layer[int(necklace[0]/2)]
+    left_neighbor = copy_bot_layer[int(necklace[-1]/2)-1]
+    right_neighbor =  copy_bot_layer[int(necklace[1]/2)-1]
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
+    RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
+    RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
+
+    #connect odd beads to their neighbors
+    for bead_index in range(2,len(necklace),2):
+        odd_leaf_index = bot_layer[int(necklace[bead_index]/2)]
+        left_neighbor = copy_bot_layer[int(necklace[bead_index-1]/2)-1]
+        right_neighbor =  copy_bot_layer[int(necklace[bead_index+1]/2)-1]
+
+        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
+        RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
+        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
+        RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
+
+    return RandomCycleGraph
