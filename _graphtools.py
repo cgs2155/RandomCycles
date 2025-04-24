@@ -669,6 +669,16 @@ def rand_cycle_coords(X: list[int], xd=1, yd=1,spacing=1):
         coords[coord+tree_size]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
     return coords
 
+def rgc_coords(X: list[int], xd=1, yd=1,spacing=1):
+    """Have N = EXIT version"""
+    left_coords = tree_coords(X,xd,yd)
+    coords = left_coords.copy()
+    tree_size = tree_mag(X)
+    for coord in left_coords.keys():
+        #coords[coord+np.prod(X)]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
+        coords[2*tree_size+1-coord]  = (left_coords[coord][0], -1*left_coords[coord][1] - spacing)
+    return coords
+
 def glued_tree_coords(X: list[int], xd=1, yd=1,spacing=1):
     left_coords = tree_coords(X,xd,yd)
     coords = left_coords.copy() #tree_coords(X,xd,yd)
@@ -808,6 +818,45 @@ def generate_random_cycle_graph(tree: Tree, necklace = None):
         RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
 
     return RandomCycleGraph
+
+def generate_rgc(tree: Tree, necklace = None):
+    """ 
+    Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees (NEWER VERSION WITH EXIT = N)
+    
+    """
+    #making some changes to work with a flipped graph
+    tree_copy = tree.deep_copy()
+    tree_size =  len(tree_copy.nodes)
+    bot_layer = [int(node.index) for node in tree_copy.nodes if node.degree == 1]
+    print(bot_layer)
+    bot_layer.sort()
+    copy_bot_layer = [int(leaf) + len(bot_layer) for leaf in bot_layer]
+    print(copy_bot_layer)
+    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(flip_graph(tree_copy), tree_size).nodes )
+    if not necklace or len(necklace) != 2*len(bot_layer):
+        necklace = gen_necklace(len(bot_layer))
+
+    odd_leaf_index = bot_layer[int(necklace[0]/2)]
+    left_neighbor = copy_bot_layer[int(necklace[-1]/2)-1]
+    right_neighbor =  copy_bot_layer[int(necklace[1]/2)-1]
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
+    RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
+    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
+    RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
+
+    #connect odd beads to their neighbors
+    for bead_index in range(2,len(necklace),2):
+        odd_leaf_index = bot_layer[int(necklace[bead_index]/2)]
+        left_neighbor = copy_bot_layer[int(necklace[bead_index-1]/2)-1]
+        right_neighbor =  copy_bot_layer[int(necklace[bead_index+1]/2)-1]
+
+        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
+        RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
+        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
+        RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
+
+    return RandomCycleGraph
+
 
 def generate_half_rgc(tree: Tree, necklace = None):
     tree_copy = tree.deep_copy()
