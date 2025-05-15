@@ -5,14 +5,6 @@ from math import factorial
 from itertools import permutations
 from tqdm import tqdm 
 
-def G(a,r):
-    if a < 0 or r < 0:
-        return int(0)
-    elif a == 0 and r == 0:
-        return int(1)
-    else:
-        return int(comb(r,2) * G(a+2,r-2) + r*a*G(a,r-1)+comb(a,2)*G(a-2,r))
-
 def num_rand_cycle(n):
     return factorial(n)*factorial(n-1)/(2)
 
@@ -111,3 +103,10 @@ def gen_necklace(n, rng = None):
         necklace.append(o)
         necklace.append(e)
     return canonical(tuple(necklace))
+
+
+def isSubset(bigger_set, smaller_set):
+    for element in smaller_set:
+        if element not in bigger_set:
+            return False
+    return True

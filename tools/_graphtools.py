@@ -9,7 +9,7 @@ from collections import deque
 from itertools import groupby
 import random
 
-from Andrew.gt import cascade
+from _vectools import *
 from _counttools import gen_necklace
 
 edge_color = '#264653'
@@ -509,7 +509,7 @@ def pl_adj(adj_matrix,title=""):
     plt.title(title)
     plt.show()
 
-def pl_graph(ax, graph, positions=None, title="" ,vertex_size=500,outline_weight = 5,edge_weight=10, margin = 10):
+def pl_graph(ax, graph, positions=None, title="" ,vertex_size=500,outline_weight = 5,edge_weight=10, margin = 10, special_colors=None, special_indices=None, labels=False):
     """Visualizes a Graph"""
     
     G = nx.Graph()
@@ -525,7 +525,18 @@ def pl_graph(ax, graph, positions=None, title="" ,vertex_size=500,outline_weight
         positions = nx.spring_layout(G)
             
     nx.draw_networkx_nodes(G, positions, node_color=vertex_color, edgecolors=edge_color, linewidths=outline_weight, node_size=vertex_size, ax=ax)
-    nx.draw_networkx_labels(G, positions, labels=nx.get_node_attributes(G, 'label'),font_size=15,font_color="black")
+
+    if special_indices is not None:
+        for j, indices in enumerate(special_indices):
+            G_color = nx.Graph()
+            for index in indices:
+                G_color.add_node(index)
+                G_color.nodes[index]['label'] = index
+            color_pos = {idx: positions[idx] for idx in indices}
+            nx.draw_networkx_nodes(G_color, color_pos, node_color=special_colors[j], edgecolors=edge_color, linewidths=outline_weight, node_size=vertex_size, ax=ax)
+
+    if labels:
+        nx.draw_networkx_labels(G, positions, labels=nx.get_node_attributes(G, 'label'),font_size=15,font_color="black")
 
     for edge in G.edges(data='weight'):
         nx.draw_networkx_edges(G, positions, edgelist=[edge], width=edge_weight,edge_color=edge_color,ax=ax)
@@ -540,6 +551,7 @@ def pl_graph(ax, graph, positions=None, title="" ,vertex_size=500,outline_weight
     ax.set_title(title)
     
     return ax
+
 
 """Make sure the fluxes are transferred correctly """
 def get_edges(A):
@@ -781,44 +793,6 @@ def createGT(X: list[int]):
     gt.construct_fluxed()
     return gt
 
-def generate_random_cycle_graph(tree: Tree, necklace = None):
-    """ 
-    Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees
-    
-    """
-    #making some changes to work with a flipped graph
-    tree_copy = tree.deep_copy()
-    #tree_copy = flip_graph(tree)
-    tree_size =  len(tree_copy.nodes)
-    bot_layer = [int(node.index) for node in tree_copy.nodes if node.degree == 1]
-    bot_layer.sort()
-    copy_bot_layer = [int(leaf) + tree_size for leaf in bot_layer]
-
-    RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(tree_copy, tree_size).nodes )
-    if not necklace or len(necklace) != 2*len(bot_layer):
-        necklace = gen_necklace(len(bot_layer))
-
-    odd_leaf_index = bot_layer[int(necklace[0]/2)]
-    left_neighbor = copy_bot_layer[int(necklace[-1]/2)-1]
-    right_neighbor =  copy_bot_layer[int(necklace[1]/2)-1]
-    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
-    RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
-    RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
-    RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
-
-    #connect odd beads to their neighbors
-    for bead_index in range(2,len(necklace),2):
-        odd_leaf_index = bot_layer[int(necklace[bead_index]/2)]
-        left_neighbor = copy_bot_layer[int(necklace[bead_index-1]/2)-1]
-        right_neighbor =  copy_bot_layer[int(necklace[bead_index+1]/2)-1]
-
-        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(left_neighbor)
-        RandomCycleGraph.node_map[left_neighbor].add_neighbor(odd_leaf_index)
-        RandomCycleGraph.node_map[odd_leaf_index].add_neighbor(right_neighbor)
-        RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
-
-    return RandomCycleGraph
-
 def generate_rgc(tree: Tree, necklace = None):
     """ 
     Generates a random cycle graph by copying a tree and then adding edges along the bottom layer of the two trees (NEWER VERSION WITH EXIT = N)
@@ -828,10 +802,8 @@ def generate_rgc(tree: Tree, necklace = None):
     tree_copy = tree.deep_copy()
     tree_size =  len(tree_copy.nodes)
     bot_layer = [int(node.index) for node in tree_copy.nodes if node.degree == 1]
-    print(bot_layer)
     bot_layer.sort()
     copy_bot_layer = [int(leaf) + len(bot_layer) for leaf in bot_layer]
-    print(copy_bot_layer)
     RandomCycleGraph = ConnectedGraph(nodes = tree_copy.nodes | shift_graph(flip_graph(tree_copy), tree_size).nodes )
     if not necklace or len(necklace) != 2*len(bot_layer):
         necklace = gen_necklace(len(bot_layer))
@@ -889,3 +861,50 @@ def generate_half_rgc(tree: Tree, necklace = None):
         RandomCycleGraph.node_map[right_neighbor].add_neighbor(odd_leaf_index)
 
     return RandomCycleGraph
+
+
+##### RGC BLOCK MATRIX ##########
+def rgc_mat(X: list[int], necklace = None):
+    l = np.prod(X)
+    if necklace is None:
+        necklace = gen_necklace(l)
+    #make the top half of the tree
+    adj_mat = cascade(X)
+    order = bfs_order(adj_mat)
+    gt_mat = change_basis(adj_mat, order)
+    
+    cut = tree_mag(X)
+    tree_mat = gt_mat[:cut,:cut]
+    N = 2*tree_mag(X)
+    #from the graph sum of the two trees
+    mat = direct_sum(tree_mat, J_n(int(N/2)) @ tree_mat@ J_n(int(N/2)) )
+
+    P_O, P_E = neck_permute(necklace)
+    off_diag = permute_bipartite_adjacency(B_l(l), P_O, P_E).astype(complex)
+    diff = int((np.shape(mat)[0]- np.shape(off_diag)[0])/2)
+
+    return mat + pad(off_diag,diff)  
+
+def rgc_mat_from_O(X: list[int], O):
+    l = np.prod(X)
+
+    #make the top half of the tree
+    adj_mat = cascade(X)
+    order = bfs_order(adj_mat)
+    gt_mat = change_basis(adj_mat, order)
+    
+    cut = tree_mag(X)
+    tree_mat = gt_mat[:cut,:cut]
+    N = 2*tree_mag(X)
+    #from the graph sum of the two trees
+    mat = direct_sum(tree_mat, J_n(int(N/2)) @ tree_mat@ J_n(int(N/2)) )
+    B = B_l(l)
+    A = np.block([
+        [np.zeros_like(B), B],
+        [B.T, np.zeros_like(B)]
+    ])
+
+    off_diag = O @ A @ O.T
+    diff = int((np.shape(mat)[0]- np.shape(off_diag)[0])/2)
+
+    return mat + pad(off_diag,diff)  
