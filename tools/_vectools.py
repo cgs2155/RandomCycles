@@ -1,5 +1,5 @@
 import numpy as np
-from _counttools import canonical
+from tools._counttools import canonical
 from scipy.linalg import expm
 
 H_gate = 1/np.sqrt(2) * np.array([[ 1, 1],
@@ -29,10 +29,16 @@ def pad(mat: np.ndarray, pad: int) -> np.ndarray:
     padded[pad:pad + mat.shape[0], pad:pad + mat.shape[1]] = mat
     return padded
 
+def delta(i,j):
+    """Kronecker delta implementation"""
+    if i == j:
+        return 1
+    return 0
+
 def e_n(n, d):
     # Creates a d-dimensional vector with 1 at the n-th position and 0 elsewhere
     vec = np.zeros(d)
-    vec[n] = 1
+    vec[n%d] = 1
     return vec
 
 def J_n(n):
@@ -55,7 +61,6 @@ def direct_sum(A, B):
   result[:m, :n] = A
   result[m:, n:] = B
   return result
-
 
 """ def C_n(X: list[int]):
     C_n_list = [np.array([[0]])]  # maybe H_0 is a 1x1 zero matrix?
@@ -165,6 +170,7 @@ def neck_from_O(O):
         necklace.append(int(evens[i]*2)+1)
 
     return tuple(canonical(necklace))
+
 
 
 ######## OVERHAULED FROM ANDREW #############

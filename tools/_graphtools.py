@@ -8,12 +8,19 @@ from typing import Union
 from collections import deque
 from itertools import groupby
 import random
+from collections import Counter 
 
-from _vectools import *
-from _counttools import gen_necklace
+from tools._vectools import *
+from tools._counttools import gen_necklace
 
 edge_color = '#264653'
 vertex_color ='#E76F51'
+
+##### FUNCTION NEEDED TO CHANGE ANDREW'S BLACK MAGIC INTO A .PHASE
+def convert_to_phase(num,flux):
+    a = np.real(num)
+    b = np.imag(num)
+    return b*np.exp(1j*a*flux)
 
 class Node:
     
@@ -173,6 +180,54 @@ class ConnectedGraph:
                         return distances[n_idx]
                     queue.append(self.node_map[n_idx])
         return -1
+
+    def path(self, nodeA: Node, nodeB: Node) -> int:
+        if nodeA.index == nodeB.index:
+            return [nodeA.index]
+
+        # predecessor map: for each visited node idx, prev[idx] is the index
+        # we came from
+        prev = {}
+
+        # standard BFS
+        visited = {nodeA.index}
+        queue = deque([nodeA.index])
+
+        found = False
+        while queue:
+            current_idx = queue.popleft()
+            # early exit
+            if current_idx == nodeB.index:
+                found = True
+                break
+
+            for nbr_idx in self.node_map[current_idx].neighbors:
+                if nbr_idx not in visited:
+                    visited.add(nbr_idx)
+                    prev[nbr_idx] = current_idx
+                    queue.append(nbr_idx)
+
+        # if we never reached nodeB
+        if not found:
+            return []
+
+        # reconstruct path by walking back from nodeB to nodeA
+        path = []
+        at = nodeB.index
+        while at != nodeA.index:
+            path.append(at)
+            at = prev[at]
+        path.append(nodeA.index)
+        path.reverse()
+
+        return path
+
+    def path_phase(self, path, flux):
+        phase = 1
+        for idx,i in enumerate(path[:-1]):
+            phase = phase*convert_to_phase(self.node_map[i].phases[path[idx+1]], flux)
+        return phase
+    
 
     def all_distances(self, vertex):
         """Returns a dictionary of distances from a vertex to all other vertics."""
@@ -775,7 +830,7 @@ def bfs_order(adj_matrix, start=0):
                 
     return order
 
-def fluxedTree(X: list[int]):
+def generate_ft(X: list[int]):
     
     adj_mat = cascade(X)
     order = bfs_order(adj_mat)
@@ -877,10 +932,10 @@ def rgc_mat(X: list[int], necklace = None):
     tree_mat = gt_mat[:cut,:cut]
     N = 2*tree_mag(X)
     #from the graph sum of the two trees
-    mat = direct_sum(tree_mat, J_n(int(N/2)) @ tree_mat@ J_n(int(N/2)) )
+    mat = direct_sum(tree_mat, J_n(int(N/2)) @ tree_mat @ J_n(int(N/2)) )
 
     P_O, P_E = neck_permute(necklace)
-    off_diag = permute_bipartite_adjacency(B_l(l), P_O, P_E).astype(complex)
+    off_diag = 1j*permute_bipartite_adjacency(B_l(l), P_O, P_E).astype(complex)
     diff = int((np.shape(mat)[0]- np.shape(off_diag)[0])/2)
 
     return mat + pad(off_diag,diff)  
@@ -904,7 +959,73 @@ def rgc_mat_from_O(X: list[int], O):
         [B.T, np.zeros_like(B)]
     ])
 
-    off_diag = O @ A @ O.T
+    off_diag = 1j*O @ A @ O.T
     diff = int((np.shape(mat)[0]- np.shape(off_diag)[0])/2)
 
     return mat + pad(off_diag,diff)  
+
+######column state help
+
+def get_col_sites(graph: ConnectedGraph):
+    root = graph.node_map[min(graph.node_map.keys())]
+    dist = graph.all_distances(root)
+
+    num_col = max(dist.values())+1
+    col_sites = [[] for _ in range(num_col)]
+    for key in dist.keys():
+        col_sites[dist[key]].append(key)
+    return col_sites
+
+def get_column_basis(graph: ConnectedGraph):
+    """generates eigenvectors in the column basis and the unitary transform that takes the graph's adjacency matrix into it
+    The Unitary is currently broken
+    """
+    col_sites = get_col_sites(graph)
+    N = len(graph.node_map)
+
+    col_states = []
+    for col in col_sites:
+        vec = sum([e_n(i-1,N) for i in col])
+        vec /= np.linalg.norm(vec)
+
+        col_states.append(vec)
+
+    V = np.stack(col_states, axis=1)
+
+    U, S, VT = np.linalg.svd(V, full_matrices=True)
+
+
+    return col_sites, V, U
+
+def left_state(graph, flux):
+    N = len(graph.node_map)
+    root = graph.node_map[min(graph.node_map.keys())]
+    dist = graph.all_distances(root)
+    vec = np.zeros(N, dtype=complex)
+
+    d =  min(Counter(dist.values()).most_common(2))[0]
+    hanging_leaves = get_col_sites(graph)[d]
+
+
+    idx_min = min(graph.node_map.keys())
+
+    for leaf in hanging_leaves:
+        vec[leaf-idx_min] = graph.path_phase(graph.path(root, graph.node_map[leaf]) ,flux)
+    vec /= np.linalg.norm(vec)
+    return vec
+
+def right_state(graph, flux):
+    N = len(graph.node_map)
+    root = graph.node_map[max(graph.node_map.keys())]
+    dist = graph.all_distances(root)
+    vec = np.zeros(N, dtype=complex)
+
+    d =  max(Counter(dist.values()).most_common(2))[0]
+    hanging_leaves = get_col_sites(graph)[d]
+
+    idx_min = min(graph.node_map.keys())
+
+    for leaf in hanging_leaves:
+        vec[leaf-idx_min] = graph.path_phase(graph.path(root, graph.node_map[leaf]) ,flux)
+    vec /= np.linalg.norm(vec)
+    return vec
