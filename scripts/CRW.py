@@ -1,8 +1,8 @@
 import numpy as np
 import math
 from scipy.linalg import expm
-from _graphtools import *
-from _vectools import *
+from tools._graphtools import *
+from tools._vectools import *
 from tqdm import tqdm 
 
 p = 2
